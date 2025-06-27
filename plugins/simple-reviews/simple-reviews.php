@@ -12,7 +12,9 @@ if (!defined('ABSPATH')) {
 
 class Simple_Reviews {
     public function __construct() {
-        add_action('init', [$this, 'register_product_review_cpt']);        
+        add_action('init', [$this, 'register_product_review_cpt']); 
+        add_action('init', [$this, 'register_rest_routes']);       
+        
     }
 
  
@@ -33,6 +35,18 @@ class Simple_Reviews {
             'methods'  => 'POST',
             'callback' => [$this, 'analyze_sentiment'],
             'permission_callback' => '__return_true',
+            'args' => [
+                'text' => [
+                    'type' => 'string',
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'validate_callback' => function($param){
+                        return is_string($param) && strlen($param);
+                    }
+                ]
+                
+
+            ]
         ]);
 
         register_rest_route('mock-api/v1', '/review-history/', [
