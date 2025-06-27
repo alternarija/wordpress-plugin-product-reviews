@@ -13,8 +13,31 @@ if (!defined('ABSPATH')) {
 class Simple_Reviews {
     public function __construct() {
         add_action('init', [$this, 'register_product_review_cpt']); 
-        add_action('init', [$this, 'register_rest_routes']);       
+        add_action('rest_api_init', [$this, 'register_rest_routes']);  
+        add_action('init',[$this, 'register_product_review_meta']);  
         
+    }
+
+    public function register_product_review_meta(){
+        register_post_meta(
+            'product_review',
+            'sentiment',
+            [
+                'type' => 'string',
+                'single' => true,
+                'show_in_rest' => true
+            ]
+        );
+
+        register_post_meta(
+            'product_review',
+            'sentiment_score',
+            [
+                'type' => 'string',
+                'single' => true,
+                'show_in_rest' => true
+            ]
+        );
     }
 
  
@@ -53,6 +76,26 @@ class Simple_Reviews {
             'methods'  => 'GET',
             'callback' => [$this, 'get_review_history'],
             'permission_callback' => '__return_true',
+            'args' => [
+                'paged' => [
+                    'type' => 'integer',
+                    'required' => false,
+                    'validate_callback' => function($param){
+                        return is_int($param) && $param > 0;
+                    }
+                ],
+                 'per_page' => [
+                    'type' => 'integer',
+                    'required' => false,
+                    'validate_callback' => function($param){
+                        return is_int($param) && $param > 0;
+                    }
+                ]
+
+
+                
+
+            ]
         ]);
     }
 
@@ -69,16 +112,23 @@ class Simple_Reviews {
         return rest_ensure_response(['sentiment' => $random_sentiment, 'score' => $sentiment_scores[$random_sentiment]]);
     }
 
-    public function get_review_history() {
-        $reviews = get_posts([
+    public function get_review_history($request) {
+
+        $paged = ($request->get_param('paged')) ? $request->get_param('paged') : 1;
+        $posts_per_page = ($request->get_param('per_page')) ? $request->get_param('per_page') : 5;
+
+        $reviews = new WP_Query([
             'post_type'      => 'product_review',
-            'posts_per_page' => 5,
+            'posts_per_page' => $posts_per_page,
+            'paged' =>  $paged,
             'orderby'        => 'date',
             'order'          => 'DESC',
         ]);
         
         $response = [];
-        foreach ($reviews as $review) {
+
+        if($reviews->have_posts()){
+            foreach ($reviews->posts as $review) {
             $response[] = [
                 'id'       => $review->ID,
                 'title'    => $review->post_title,
@@ -87,7 +137,14 @@ class Simple_Reviews {
             ];
         }
 
-        return rest_ensure_response($response);
+        }
+        
+        $res = rest_ensure_response($response);
+
+        $res->header('X-WP-Total', (int)$reviews->found_posts);
+        $res->header('X-WP-TotalPages',(int)$reviews->max_num_pages);
+
+        return $res;
     }
 
     public function display_product_reviews() {
